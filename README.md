@@ -11,9 +11,7 @@ Built with plain JavaScript (ES modules), [Hono](https://hono.dev/), D1, and Dur
 
 ## Deploy
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/your-username/cloudflare-status-page)
-
-> Replace the URL above with your fork's repository URL.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/funfirst/getstatuspage)
 
 Deploying provisions the D1 database and Durable Object automatically and runs migrations as part of the `deploy` script.
 
