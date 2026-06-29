@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-status-page",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "triggers": {
+    // Run the probe coordinator every minute. Cloudflare's smallest interval.
+    "crons": ["* * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "status-page-db",
+      "database_id": "status-page-db",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REGION_PROBE",
+        "class_name": "RegionProbe"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RegionProbe"]
+    }
+  ],
+  "vars": {
+    // Non-secret defaults. Secrets (EMAILIT_API_KEY, ADMIN_PASSWORD) are set
+    // via `wrangler secret put` or the dashboard after first deploy.
+    "PUBLIC_BASE_URL": ""
+  }
+}
