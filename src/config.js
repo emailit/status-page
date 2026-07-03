@@ -58,6 +58,12 @@ export const config = {
   retries: 3,
   retryDelayMs: 500,
 
+  // Send a throwaway warm-up request before the timed one so the reported
+  // latency excludes DNS/TCP/TLS handshake setup (steady-state RTT). Set to
+  // false to measure cold-connection latency instead. Per-service `warmup`
+  // overrides this.
+  warmup: true,
+
   // How long to retain raw check rows (days). Older rows are pruned.
   retentionDays: 45,
 

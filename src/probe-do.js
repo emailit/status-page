@@ -97,7 +97,6 @@ export class RegionProbe extends DurableObject {
     const timeoutMs = service.timeoutMs ?? 5000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const started = Date.now();
 
     const base = {
       service_id: service.id,
@@ -108,15 +107,35 @@ export class RegionProbe extends DurableObject {
       error: null,
     };
 
-    try {
-      const res = await fetch(service.url, {
+    const doFetch = () =>
+      fetch(service.url, {
         method: service.method ?? "GET",
         redirect: "manual",
         signal: controller.signal,
         headers: { "user-agent": "CloudflareStatusPage/1.0 (+probe)" },
         cf: { cacheTtl: 0, cacheEverything: false },
       });
+
+    // Warm-up: a throwaway request pays the DNS + TCP + TLS handshake cost so the
+    // timed request below reuses the warm connection. The reported latency then
+    // reflects steady-state request/response time rather than cold-connection
+    // setup. Warm-up failures are ignored; the timed request re-checks and will
+    // surface any genuine error accurately.
+    const warmup = service.warmup ?? config.warmup ?? true;
+    if (warmup) {
+      try {
+        const pre = await doFetch();
+        await pre.body?.cancel?.();
+      } catch {
+        /* ignore warm-up errors */
+      }
+    }
+
+    try {
+      const started = Date.now();
+      const res = await doFetch();
       const latency = Date.now() - started;
+      await res.body?.cancel?.();
       const ok = allowed.includes(res.status);
       return {
         ...base,
@@ -126,12 +145,11 @@ export class RegionProbe extends DurableObject {
         error: ok ? null : `unexpected status ${res.status}`,
       };
     } catch (err) {
-      const latency = Date.now() - started;
       const aborted = err?.name === "AbortError";
       return {
         ...base,
         ok: false,
-        latency_ms: latency,
+        latency_ms: null,
         error: aborted ? `timeout after ${timeoutMs}ms` : String(err?.message || err),
       };
     } finally {
