@@ -178,7 +178,7 @@ export const config = {
         title: "Emailit",
         links: [
           { label: "Home", href: "https://emailit.com" },
-          { label: "App", href: "https://api.emailit.com/" },
+          { label: "App", href: "https://app.emailit.com" },
         ],
       },
       {
@@ -191,8 +191,8 @@ export const config = {
       {
         title: "Sending",
         links: [
-          { label: "API v2", href: "https://api.emailit.com/v2" },
-          { label: "SMTP (smtp.emailit.com)", href: "https://emailit.com/docs" },
+          { label: "API v2", href: "https://emailit.com/docs/api-reference/" },
+          { label: "SMTP (smtp.emailit.com)", href: "https://emailit.com/docs/quickstart/smtp/" },
         ],
       },
     ],
