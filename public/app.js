@@ -165,7 +165,7 @@
         const cell = snap.matrix[svc.id] && snap.matrix[svc.id][region];
         if (!cell) return '<td class="cell cell-none" title="no data">-</td>';
         const cls = cell.ok ? "cell-ok" : "cell-bad";
-        const label = cell.ok ? (cell.latency_ms != null ? String(cell.latency_ms) : "ok") : "\u00d7";
+        const label = cell.ok ? (cell.latency_ms != null ? cell.latency_ms + " ms" : "ok") : "\u00d7";
         const detail = cell.ok
           ? (cell.latency_ms != null ? cell.latency_ms + " ms" : "ok")
           : (cell.error || ("HTTP " + (cell.status_code || "?")));

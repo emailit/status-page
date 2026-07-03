@@ -138,7 +138,7 @@ function renderLiveMatrix(matrix, lastUpdated) {
           const detail = cell.ok
             ? `${cell.latency_ms != null ? cell.latency_ms + " ms" : "ok"}`
             : escapeHtml(cell.error || `HTTP ${cell.status_code ?? "?"}`);
-          const label = cell.ok ? (cell.latency_ms != null ? `${cell.latency_ms}` : "ok") : "×";
+          const label = cell.ok ? (cell.latency_ms != null ? `${cell.latency_ms} ms` : "ok") : "×";
           return `<td class="cell ${cls}" title="${escapeHtml(detail)}">${escapeHtml(label)}</td>`;
         })
         .join("");
@@ -148,7 +148,7 @@ function renderLiveMatrix(matrix, lastUpdated) {
 
   return `<section class="section">
     <h2 class="section-title">Live service data</h2>
-    <p class="section-sub">Live probe results by source region. Numbers are latency in ms; × indicates a failed check.</p>
+    <p class="section-sub">Live probe results by source region. Numbers show response latency; × indicates a failed check.</p>
     <div class="matrix-wrap">
       <table class="matrix">
         <thead><tr><th class="row-head">Service</th>${head}</tr></thead>
