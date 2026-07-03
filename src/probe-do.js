@@ -6,6 +6,7 @@
  * near that region. The coordinator calls `probeAll()` via RPC each cycle.
  */
 import { DurableObject } from "cloudflare:workers";
+import { connect } from "cloudflare:sockets";
 import { config, allowedStatusCodes } from "./config.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,6 +47,52 @@ export class RegionProbe extends DurableObject {
   }
 
   async #probeOne(service, region, checkedAt) {
+    if (service.type === "tcp") {
+      return this.#probeTcp(service, region, checkedAt);
+    }
+    return this.#probeHttp(service, region, checkedAt);
+  }
+
+  /** TCP connectivity check via the Workers socket API (used for SMTP, etc.). */
+  async #probeTcp(service, region, checkedAt) {
+    const timeoutMs = service.timeoutMs ?? 5000;
+    const started = Date.now();
+    const base = {
+      service_id: service.id,
+      region,
+      checked_at: checkedAt,
+      status_code: null,
+      latency_ms: null,
+      error: null,
+    };
+
+    let socket;
+    try {
+      socket = connect(
+        { hostname: service.host, port: service.port },
+        service.tls ? { secureTransport: "on" } : undefined
+      );
+      // `opened` resolves once the TCP (and TLS, if enabled) handshake completes.
+      const opened = socket.opened;
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs)
+      );
+      await Promise.race([opened, timeout]);
+      const latency = Date.now() - started;
+      return { ...base, ok: true, latency_ms: latency };
+    } catch (err) {
+      const latency = Date.now() - started;
+      return { ...base, ok: false, latency_ms: latency, error: String(err?.message || err) };
+    } finally {
+      try {
+        await socket?.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  async #probeHttp(service, region, checkedAt) {
     const allowed = allowedStatusCodes(service);
     const timeoutMs = service.timeoutMs ?? 5000;
     const controller = new AbortController();
