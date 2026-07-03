@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cloudflare-status-page",
+  "name": "status-page",
   "main": "src/index.js",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "status-page-db",
-      "database_id": "status-page-db",
+      "database_id": "07fcadb9-079c-484f-a76e-bfd2977dab4e",
       "migrations_dir": "migrations"
     }
   ],
@@ -43,6 +43,6 @@
   "vars": {
     // Non-secret defaults. Secrets (EMAILIT_API_KEY, ADMIN_PASSWORD) are set
     // via `wrangler secret put` or the dashboard after first deploy.
-    "PUBLIC_BASE_URL": ""
+    "PUBLIC_BASE_URL": "https://status.emailit.com"
   }
 }
