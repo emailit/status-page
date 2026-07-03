@@ -50,7 +50,11 @@ export async function runProbeCycle(env, opts = {}) {
         const results = await stub.probeAll({ region, services });
         return { region, results };
       } catch (err) {
-        // If a region DO fails entirely, record failures for visibility.
+        // The region's Durable Object could not run this cycle (e.g. cold-start
+        // / placement hiccup on Cloudflare's side). This is a MONITORING failure,
+        // not a service failure. Record the rows for visibility but flag them so
+        // health evaluation ignores them (otherwise a single region's probe
+        // outage would falsely mark every service degraded).
         const checkedAt = nowSec();
         return {
           region,
@@ -62,19 +66,31 @@ export async function runProbeCycle(env, opts = {}) {
             latency_ms: null,
             error: `probe dispatch failed: ${String(err?.message || err)}`,
             checked_at: checkedAt,
+            probe_error: true,
           })),
         };
       }
     })
   );
 
-  // Flatten + persist raw checks.
+  // Flatten. Drop monitoring-failure rows (a region DO that couldn't run this
+  // cycle) so they never count as service downtime in uptime charts, the live
+  // matrix, or health evaluation.
   const allRows = perRegion.flatMap((r) => r.results);
-  await insertChecks(env.DB, allRows);
+  const realRows = allRows.filter((r) => !r.probe_error);
+  const dispatchFailures = allRows.length - realRows.length;
+  if (dispatchFailures > 0) {
+    console.warn(
+      `probe: ${dispatchFailures} region/service dispatch failure(s) ignored (monitoring issue, not a service outage)`
+    );
+  }
+
+  // Persist only real probe results.
+  await insertChecks(env.DB, realRows);
 
   // Group results by service for evaluation.
   const byService = new Map();
-  for (const row of allRows) {
+  for (const row of realRows) {
     if (!byService.has(row.service_id)) byService.set(row.service_id, []);
     byService.get(row.service_id).push(row);
   }
@@ -99,7 +115,11 @@ export async function runProbeCycle(env, opts = {}) {
  * update service_state, manage auto-incidents, and alert on transitions.
  */
 async function evaluateService(env, service, rows) {
-  const total = rows.length || 1;
+  // No successful dispatch to any region this cycle => no signal. Leave the
+  // service's status untouched rather than inventing an outage/disruption.
+  if (rows.length === 0) return;
+
+  const total = rows.length;
   const failed = rows.filter((r) => !r.ok).length;
   const allFail = failed >= total;
   const someFail = failed > 0 && failed < total;
