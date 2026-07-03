@@ -47,10 +47,16 @@ export const config = {
   // Regions to probe from. Use the location hints above.
   regions: ["enam", "weur", "apac"],
 
-  // How often, in seconds, the cron coordinator records a probe cycle.
-  // The Worker cron fires every minute; this guards against over-probing if you
-  // increase the cron frequency. Keep >= 60 unless you know what you are doing.
-  probeIntervalSec: 60,
+  // How often, in minutes, services are actually probed. The Worker cron fires
+  // every minute, but a cycle only probes if this much time has elapsed since
+  // the last recorded check. Change this value (not the cron) to adjust cadence.
+  probeIntervalMin: 5,
+
+  // When a probe fails, retry this many additional times immediately (with
+  // retryDelayMs between attempts) before recording a failure. Guards against
+  // one-off network blips being counted as downtime.
+  retries: 3,
+  retryDelayMs: 500,
 
   // How long to retain raw check rows (days). Older rows are pruned.
   retentionDays: 45,
@@ -63,7 +69,6 @@ export const config = {
   //   expectStatus  expected HTTP status (default 200); or array of allowed codes
   //   timeoutMs     per-probe timeout (default 5000)
   //   degradedMs    latency above this (ms) marks the service "degraded" (optional)
-  //   group         optional grouping label in the services list
   services: [
     {
       id: "api-us-east",
@@ -73,7 +78,6 @@ export const config = {
       expectStatus: 200,
       timeoutMs: 5000,
       degradedMs: 1500,
-      group: "API",
     },
     {
       id: "api-eu-west",
@@ -83,7 +87,6 @@ export const config = {
       expectStatus: 200,
       timeoutMs: 5000,
       degradedMs: 1500,
-      group: "API",
     },
     {
       id: "web-app",
@@ -92,7 +95,6 @@ export const config = {
       method: "GET",
       expectStatus: [200, 301, 302],
       timeoutMs: 5000,
-      group: "Web",
     },
     {
       id: "docs",
@@ -101,7 +103,6 @@ export const config = {
       method: "GET",
       expectStatus: 200,
       timeoutMs: 5000,
-      group: "Web",
     },
   ],
 
@@ -112,12 +113,23 @@ export const config = {
     fromEmail: "Acme Status <status@example.com>",
     // Recipients notified on outage/recovery.
     toEmails: ["oncall@example.com"],
-    // Consecutive failed probe cycles before a service is considered "down" and alerted.
-    failureThreshold: 2,
-    // Consider a service down only if it fails from at least this fraction of regions.
-    regionFailFraction: 0.5,
     // Minimum minutes between repeated "still down" reminders (0 = only alert on transitions).
     reminderIntervalMin: 0,
+  },
+
+  // Optional footer. Only rendered when `columns` is non-empty. Mirrors the
+  // multi-column footer on status.x.ai.
+  //   columns: [{ title, links: [{ label, href }] }]
+  footer: {
+    columns: [
+      // {
+      //   title: "Company",
+      //   links: [
+      //     { label: "Home", href: "https://example.com" },
+      //     { label: "Docs", href: "https://example.com/docs" },
+      //   ],
+      // },
+    ],
   },
 };
 

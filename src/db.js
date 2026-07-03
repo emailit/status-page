@@ -111,9 +111,39 @@ export async function getDailyUptime(db, serviceId, days) {
   return results ?? [];
 }
 
+/**
+ * Uptime buckets over the last `hours`, grouped into `bucketMin`-minute windows.
+ * Returns rows keyed by bucket index (checked_at / (bucketMin*60)). The renderer
+ * gap-fills to a contiguous range so empty buckets render gray.
+ */
+export async function getIntradayUptime(db, serviceId, hours = 24, bucketMin = 5) {
+  const bucketSec = bucketMin * 60;
+  const since = nowSec() - hours * 3600;
+  const { results } = await db
+    .prepare(
+      `SELECT
+         CAST(checked_at / ? AS INTEGER) AS bucket,
+         COUNT(*) AS total,
+         SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_count
+       FROM checks
+       WHERE service_id = ? AND checked_at >= ?
+       GROUP BY bucket
+       ORDER BY bucket ASC`
+    )
+    .bind(bucketSec, serviceId, since)
+    .all();
+  return results ?? [];
+}
+
 export async function pruneOldChecks(db, retentionDays) {
   const cutoff = nowSec() - retentionDays * 86400;
   await db.prepare(`DELETE FROM checks WHERE checked_at < ?`).bind(cutoff).run();
+}
+
+/** Most recent checked_at across all checks (0 if none). Used to gate cadence. */
+export async function getLastCheckTime(db) {
+  const row = await db.prepare(`SELECT MAX(checked_at) AS last FROM checks`).first();
+  return row?.last ?? 0;
 }
 
 /* ----------------------------------------------------------- service_state */

@@ -6,7 +6,7 @@ import {
   getServiceState,
   getUptime,
   getDailyUptime,
-  getRecentChecks,
+  getIntradayUptime,
   listIncidentsForService,
   getIncident,
   listIncidents,
@@ -48,18 +48,28 @@ app.get("/service/:id", async (c) => {
   const service = getService(c.req.param("id"));
   if (!service) return html(c, renderIncidentPage(null), 404);
 
-  const [state, uptime, dailyUptime, recent, incidents] = await Promise.all([
+  const [state, uptime, uptime24h, dailyUptime, intraday, incidents] = await Promise.all([
     getServiceState(c.env.DB, service.id),
     getUptime(c.env.DB, service.id, 30),
+    getUptime(c.env.DB, service.id, 1),
     getDailyUptime(c.env.DB, service.id, 30),
-    getRecentChecks(c.env.DB, service.id, 90),
+    getIntradayUptime(c.env.DB, service.id, 24, 5),
     listIncidentsForService(c.env.DB, service.id, { limit: 50 }),
   ]);
 
   const issueCounts = countIssues(incidents, 30);
   return html(
     c,
-    renderServiceDetail({ service, state, uptime, issueCounts, incidents, dailyUptime, recent })
+    renderServiceDetail({
+      service,
+      state,
+      uptime,
+      uptime24h,
+      issueCounts,
+      incidents,
+      dailyUptime,
+      intraday,
+    })
   );
 });
 
@@ -155,8 +165,9 @@ app.post("/api/admin/incidents/:id/delete", async (c) => {
 });
 
 // Manual probe trigger (handy for testing without waiting for cron).
+// Forced so it ignores the probe-interval cadence gate.
 app.post("/api/admin/probe", async (c) => {
-  await runProbeCycle(c.env);
+  await runProbeCycle(c.env, { force: true });
   return c.json({ ok: true });
 });
 

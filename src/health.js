@@ -12,6 +12,7 @@ import {
   getServiceState,
   upsertServiceState,
   pruneOldChecks,
+  getLastCheckTime,
   nowSec,
   createIncident,
   updateIncident,
@@ -20,11 +21,25 @@ import {
 } from "./db.js";
 import { sendDownAlert, sendDegradedAlert, sendRecoveryAlert } from "./alerts.js";
 
-/** Run one full probe + evaluation cycle. */
-export async function runProbeCycle(env) {
+/**
+ * Run one full probe + evaluation cycle.
+ * @param {object} env
+ * @param {object} [opts]
+ * @param {boolean} [opts.force] skip the interval gate (used by manual probe)
+ */
+export async function runProbeCycle(env, opts = {}) {
   const services = config.services;
   const regions = config.regions;
   if (!services.length || !regions.length) return;
+
+  // Cadence gate: only probe if probeIntervalMin has elapsed since the last check.
+  // The cron fires every minute; this makes the effective interval configurable.
+  if (!opts.force) {
+    const intervalSec = (config.probeIntervalMin ?? 5) * 60;
+    const last = await getLastCheckTime(env.DB);
+    // Allow a small slack so a 5-min interval isn't pushed to 6 by cron jitter.
+    if (last && nowSec() - last < intervalSec - 15) return;
+  }
 
   // Fan out: one DO per region, placed near that region.
   const perRegion = await Promise.all(
@@ -84,13 +99,10 @@ export async function runProbeCycle(env) {
  * update service_state, manage auto-incidents, and alert on transitions.
  */
 async function evaluateService(env, service, rows) {
-  const alerts = config.alerts ?? {};
-  const failFraction = alerts.regionFailFraction ?? 0.5;
-  const threshold = alerts.failureThreshold ?? 2;
-
   const total = rows.length || 1;
   const failed = rows.filter((r) => !r.ok).length;
-  const failRatio = failed / total;
+  const allFail = failed >= total;
+  const someFail = failed > 0 && failed < total;
 
   // Degraded if up everywhere but slow beyond degradedMs in any region.
   const degradedMs = service.degradedMs;
@@ -112,22 +124,28 @@ async function evaluateService(env, service, rows) {
     last_alerted_at: null,
   };
 
-  const cycleFailing = failRatio >= failFraction;
-  const consecutiveFailures = cycleFailing ? (prev.consecutive_failures ?? 0) + 1 : 0;
-
-  // Determine new status.
+  // Status semantics:
+  //   all regions fail  -> down    (outage)
+  //   some regions fail -> degraded (disruption)
+  //   all up but slow   -> degraded
+  //   otherwise         -> available
+  // Probes are already retried in-region, so a failure here is not transient.
   let newStatus;
-  if (consecutiveFailures >= threshold) {
+  let incidentType = null;
+  if (allFail) {
     newStatus = "down";
-  } else if (cycleFailing) {
-    // Failing but below threshold -> show degraded rather than fully down.
+    incidentType = "outage";
+  } else if (someFail) {
     newStatus = "degraded";
+    incidentType = "disruption";
   } else if (anySlow) {
     newStatus = "degraded";
+    incidentType = "disruption";
   } else {
     newStatus = "available";
   }
 
+  const consecutiveFailures = newStatus === "available" ? 0 : (prev.consecutive_failures ?? 0) + 1;
   const statusChanged = newStatus !== prev.current_status;
   const now = nowSec();
 
@@ -135,7 +153,8 @@ async function evaluateService(env, service, rows) {
     service,
     status: newStatus,
     previousStatus: prev.current_status,
-    failRatio,
+    failedCount: failed,
+    total,
     avgLatency,
     regions: rows,
   };
@@ -143,16 +162,15 @@ async function evaluateService(env, service, rows) {
   // Alerting + incident management on meaningful transitions.
   let lastAlertedAt = prev.last_alerted_at ?? null;
 
-  const becameDown = newStatus === "down" && prev.current_status !== "down";
-  const recovered =
-    newStatus === "available" && (prev.current_status === "down" || prev.current_status === "degraded");
+  const wasProblem = prev.current_status === "down" || prev.current_status === "degraded";
+  const recovered = newStatus === "available" && wasProblem;
 
-  if (becameDown) {
+  if (newStatus === "down" && prev.current_status !== "down") {
     await openOrUpdateAutoIncident(env, service, "outage", rows);
     const r = await sendDownAlert(env, service, evaluation);
     if (r.ok) lastAlertedAt = now;
-  } else if (newStatus === "degraded" && prev.current_status === "available") {
-    await openOrUpdateAutoIncident(env, service, "disruption", rows);
+  } else if (newStatus === "degraded" && prev.current_status !== "degraded") {
+    await openOrUpdateAutoIncident(env, service, incidentType ?? "disruption", rows);
     const r = await sendDegradedAlert(env, service, evaluation);
     if (r.ok) lastAlertedAt = now;
   } else if (recovered) {

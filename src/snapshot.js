@@ -32,7 +32,7 @@ export async function buildSnapshot(env) {
   return {
     pageTitle: config.pageTitle,
     regions: config.regions,
-    services: config.services.map((s) => ({ id: s.id, name: s.name, group: s.group || "Services" })),
+    services: config.services.map((s) => ({ id: s.id, name: s.name })),
     states,
     matrix,
     activeIncidents,

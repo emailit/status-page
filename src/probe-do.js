@@ -6,7 +6,9 @@
  * near that region. The coordinator calls `probeAll()` via RPC each cycle.
  */
 import { DurableObject } from "cloudflare:workers";
-import { allowedStatusCodes } from "./config.js";
+import { config, allowedStatusCodes } from "./config.js";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class RegionProbe extends DurableObject {
   /**
@@ -19,9 +21,28 @@ export class RegionProbe extends DurableObject {
   async probeAll({ region, services }) {
     const checkedAt = Math.floor(Date.now() / 1000);
     const results = await Promise.all(
-      services.map((svc) => this.#probeOne(svc, region, checkedAt))
+      services.map((svc) => this.#probeWithRetries(svc, region, checkedAt))
     );
     return results;
+  }
+
+  /**
+   * Probe a service, retrying on failure to filter out transient blips.
+   * Returns as soon as an attempt succeeds; otherwise returns the last failure
+   * (annotated with the number of attempts made).
+   */
+  async #probeWithRetries(service, region, checkedAt) {
+    const maxRetries = Math.max(0, config.retries ?? 0);
+    const retryDelayMs = config.retryDelayMs ?? 500;
+
+    let result;
+    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      result = await this.#probeOne(service, region, checkedAt);
+      result.attempts = attempt;
+      if (result.ok) return result;
+      if (attempt <= maxRetries) await sleep(retryDelayMs);
+    }
+    return result;
   }
 
   async #probeOne(service, region, checkedAt) {

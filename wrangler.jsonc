@@ -12,7 +12,10 @@
     "binding": "ASSETS"
   },
   "triggers": {
-    // Run the probe coordinator every minute. Cloudflare's smallest interval.
+    // Fire every minute (Cloudflare's smallest interval). The effective probe
+    // cadence is controlled by `probeIntervalMin` in src/config.js (default 5);
+    // a cycle only probes once that much time has elapsed. Change the config
+    // value, not this cron, to adjust how often services are checked.
     "crons": ["* * * * *"]
   },
   "d1_databases": [

@@ -1,14 +1,146 @@
-// Auto-refresh the live service matrix and service statuses without a full reload.
+// Client behavior: timezone localization, hover tooltips for uptime bars, and
+// live auto-refresh of the service matrix / statuses.
 (function () {
   const REFRESH_MS = 30000;
-  const root = document.querySelector("[data-status-root]");
-  if (!root) return;
+  const TZ_KEY = "sp_tz";
 
-  const REGION_LABELS = {
-    wnam: "US West", enam: "US East", sam: "South America", weur: "EU West",
-    eeur: "EU East", apac: "Asia-Pacific", "apac-ne": "Asia-Pacific NE",
-    "apac-se": "Asia-Pacific SE", oc: "Oceania", afr: "Africa", me: "Middle East",
-  };
+  /* --------------------------------------------------------- timezone */
+
+  function browserZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch (_) {
+      return "UTC";
+    }
+  }
+
+  function selectedZone() {
+    return localStorage.getItem(TZ_KEY) || browserZone();
+  }
+
+  function zoneList() {
+    try {
+      if (typeof Intl.supportedValuesOf === "function") {
+        return Intl.supportedValuesOf("timeZone");
+      }
+    } catch (_) {}
+    return ["UTC", browserZone()];
+  }
+
+  function fmtTs(epoch, zone) {
+    const opts = {
+      timeZone: zone,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    };
+    try {
+      return new Intl.DateTimeFormat("en-US", opts).format(new Date(epoch * 1000));
+    } catch (_) {
+      return new Date(epoch * 1000).toUTCString();
+    }
+  }
+
+  function tzAbbrev(zone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        timeZoneName: "short",
+      }).formatToParts(new Date());
+      const p = parts.find((x) => x.type === "timeZoneName");
+      return p ? p.value : zone;
+    } catch (_) {
+      return zone;
+    }
+  }
+
+  function applyTimezone(zone) {
+    document.querySelectorAll("[data-ts]").forEach((el) => {
+      const ts = Number(el.getAttribute("data-ts"));
+      if (!ts) return;
+      el.textContent = fmtTs(ts, zone) + " " + tzAbbrev(zone);
+    });
+  }
+
+  function initTimezone() {
+    const select = document.querySelector("[data-tz-select]");
+    const zone = selectedZone();
+    if (select) {
+      const zones = zoneList();
+      if (!zones.includes(zone)) zones.unshift(zone);
+      select.innerHTML = zones
+        .map(
+          (z) =>
+            '<option value="' + z + '"' + (z === zone ? " selected" : "") + ">" + z + "</option>"
+        )
+        .join("");
+      select.addEventListener("change", () => {
+        localStorage.setItem(TZ_KEY, select.value);
+        applyTimezone(select.value);
+      });
+    }
+    applyTimezone(zone);
+  }
+
+  /* --------------------------------------------------------- tooltips */
+
+  function initTooltips() {
+    const tip = document.querySelector("[data-tooltip]");
+    if (!tip) return;
+    const zone = selectedZone();
+
+    function show(e, text) {
+      tip.textContent = text;
+      tip.hidden = false;
+      move(e);
+    }
+    function move(e) {
+      const pad = 12;
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      const rect = tip.getBoundingClientRect();
+      if (x + rect.width > window.innerWidth) x = e.clientX - rect.width - pad;
+      if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - pad;
+      tip.style.left = x + "px";
+      tip.style.top = y + "px";
+    }
+    function hide() {
+      tip.hidden = true;
+    }
+
+    document.addEventListener("mouseover", (e) => {
+      const bar = e.target.closest("[data-tip], [data-tip-ts]");
+      if (!bar) return;
+      let text;
+      if (bar.hasAttribute("data-tip")) {
+        text = bar.getAttribute("data-tip");
+      } else {
+        const start = Number(bar.getAttribute("data-tip-ts"));
+        const dur = Number(bar.getAttribute("data-tip-dur")) || 300;
+        const pct = bar.getAttribute("data-tip-pct") || "";
+        const z = selectedZone();
+        const t1 = fmtTs(start, z);
+        const t2 = new Intl.DateTimeFormat("en-US", {
+          timeZone: z,
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date((start + dur) * 1000));
+        text = t1 + " – " + t2 + "\nUptime: " + pct;
+      }
+      show(e, text);
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!tip.hidden) move(e);
+    });
+    document.addEventListener("mouseout", (e) => {
+      const bar = e.target.closest("[data-tip], [data-tip-ts]");
+      if (bar) hide();
+    });
+  }
+
+  /* ----------------------------------------------------- live refresh */
 
   function statusColor(status) {
     return status === "available" ? "var(--ok)"
@@ -23,13 +155,6 @@
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  }
-  function fmtDate(epoch) {
-    if (!epoch) return "N/A";
-    return new Date(epoch * 1000).toLocaleString("en-US", {
-      timeZone: "UTC", month: "short", day: "numeric", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }) + " UTC";
   }
 
   function updateMatrix(snap) {
@@ -49,8 +174,15 @@
       return '<tr><th class="row-head">' + esc(svc.name) + "</th>" + cells + "</tr>";
     }).join("");
 
-    const lu = document.querySelector("[data-last-updated]");
-    if (lu) lu.textContent = snap.lastUpdated ? fmtDate(snap.lastUpdated) : "N/A";
+    const lu = document.querySelector("[data-ts]");
+    // last-updated span is re-localized by applyTimezone via its data-ts.
+    if (snap.lastUpdated) {
+      const luSpan = document.querySelector(".last-updated [data-ts]");
+      if (luSpan) {
+        luSpan.setAttribute("data-ts", snap.lastUpdated);
+        luSpan.textContent = fmtTs(snap.lastUpdated, selectedZone()) + " " + tzAbbrev(selectedZone());
+      }
+    }
   }
 
   function updateServices(snap) {
@@ -76,5 +208,11 @@
     } catch (_) { /* ignore transient errors */ }
   }
 
-  setInterval(refresh, REFRESH_MS);
+  /* -------------------------------------------------------------- init */
+
+  initTimezone();
+  initTooltips();
+  if (document.querySelector("[data-status-root]") && document.querySelector("[data-matrix-body]")) {
+    setInterval(refresh, REFRESH_MS);
+  }
 })();

@@ -36,7 +36,9 @@ Everything is configured in [`src/config.js`](src/config.js). Edit the `services
 export const config = {
   pageTitle: "Acme Status",
   regions: ["enam", "weur", "apac"], // Durable Object location hints
-  probeIntervalSec: 60,
+  probeIntervalMin: 5,   // effective probe cadence (cron fires every minute)
+  retries: 3,            // extra attempts on failure before recording downtime
+  retryDelayMs: 500,
   services: [
     {
       id: "api-us-east",
@@ -46,18 +48,31 @@ export const config = {
       expectStatus: 200,     // or an array, e.g. [200, 301, 302]
       timeoutMs: 5000,
       degradedMs: 1500,      // optional: slower than this => "degraded"
-      group: "API",
     },
   ],
   alerts: {
     enabled: true,
     fromEmail: "Acme Status <status@example.com>", // verified Emailit domain
     toEmails: ["oncall@example.com"],
-    failureThreshold: 2,     // consecutive failed cycles before "down" + alert
-    regionFailFraction: 0.5, // down only if >= this fraction of regions fail
+  },
+  footer: {
+    // Optional multi-column footer. Only rendered when columns is non-empty.
+    columns: [
+      // { title: "Company", links: [{ label: "Home", href: "https://example.com" }] },
+    ],
   },
 };
 ```
+
+### Status semantics
+
+Probes run from every configured region and are retried (`retries`) on failure to
+filter out transient blips. After retries:
+
+- All regions fail -> service is **down** (auto **outage** incident).
+- Some regions fail -> service is **degraded** (auto **disruption** incident).
+- All up but slower than `degradedMs` -> **degraded**.
+- Otherwise -> **operational**.
 
 ### Supported regions (location hints)
 
@@ -66,9 +81,9 @@ export const config = {
 ## How it works
 
 ```
-Cron (every minute) -> scheduled() coordinator
+Cron (every minute, gated to probeIntervalMin) -> scheduled() coordinator
   -> fan out to one RegionProbe Durable Object per region (locationHint)
-     -> each DO fetches every service URL from its region
+     -> each DO fetches every service URL from its region (with retries)
      -> results written to D1 (checks)
   -> evaluate per-service health, open/close auto-incidents, send Emailit alerts
 Visitors -> Worker fetch() -> render status page / per-service detail from D1

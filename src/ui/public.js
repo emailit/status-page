@@ -8,7 +8,10 @@ import {
   incidentTypeColor,
   fmtDate,
   fmtDuration,
+  tsSpan,
 } from "./layout.js";
+
+const DAY = 86400;
 
 function overallStatus(states) {
   const vals = config.services.map((s) => states[s.id]?.current_status ?? "unknown");
@@ -38,10 +41,35 @@ function overallHeadline(status, activeIncidents) {
 function header() {
   return `<header class="site-header">
     <div class="container header-inner">
-      <div class="brand">${escapeHtml(config.pageTitle)}</div>
-      <nav class="nav"><a href="/">Status</a></nav>
+      <div class="brand"><a href="/">${escapeHtml(config.pageTitle)}</a></div>
+      <div class="header-tools">
+        <label class="tz-select">
+          <span class="tz-label">Timezone</span>
+          <select data-tz-select aria-label="Timezone"></select>
+        </label>
+      </div>
     </div>
   </header>`;
+}
+
+function renderFooter() {
+  const columns = config.footer?.columns ?? [];
+  if (!columns.length) return `<footer class="footer"></footer>`;
+  const cols = columns
+    .map((col) => {
+      const links = (col.links ?? [])
+        .map(
+          (l) =>
+            `<li><a href="${escapeHtml(l.href)}" rel="noopener">${escapeHtml(l.label)}</a></li>`
+        )
+        .join("");
+      return `<div class="footer-col">
+        <h4 class="footer-title">${escapeHtml(col.title ?? "")}</h4>
+        <ul class="footer-links">${links}</ul>
+      </div>`;
+    })
+    .join("");
+  return `<footer class="footer footer-cols"><div class="footer-inner">${cols}</div></footer>`;
 }
 
 export function renderHome({ states, matrix, activeIncidents, recentIncidents, lastUpdated }) {
@@ -56,10 +84,9 @@ export function renderHome({ states, matrix, activeIncidents, recentIncidents, l
     ${renderLiveMatrix(matrix, lastUpdated)}
     ${renderServices(states)}
     ${renderRecentIncidents(recentIncidents)}
-    <footer class="footer">
-      <span>Powered by Cloudflare Status Page</span>
-    </footer>
   </main>
+  ${renderFooter()}
+  <div class="tooltip" data-tooltip hidden></div>
   <script src="/app.js" defer></script>`;
 
   return page({ title: `${config.pageTitle} Status`, body });
@@ -84,7 +111,7 @@ function renderActiveIncidents(incidents) {
           <span class="pill" style="--pill:${incidentTypeColor(i.type)}">${escapeHtml(i.type)}</span>
           <span class="incident-title">${escapeHtml(i.title)}</span>
         </div>
-        <div class="incident-meta">${escapeHtml(i.status)} · ${escapeHtml(fmtDate(i.started_at))}</div>
+        <div class="incident-meta">${escapeHtml(i.status)} · ${tsSpan(i.started_at)}</div>
         ${latest ? `<p class="incident-body">${escapeHtml(latest.body)}</p>` : ""}
       </a>`;
     })
@@ -128,42 +155,27 @@ function renderLiveMatrix(matrix, lastUpdated) {
         <tbody data-matrix-body>${rows}</tbody>
       </table>
     </div>
-    <div class="last-updated">Last updated <span data-last-updated>${escapeHtml(lastUpdated ? fmtDate(lastUpdated) : "N/A")}</span></div>
+    <div class="last-updated">Last updated ${lastUpdated ? tsSpan(lastUpdated) : "<span data-last-updated>N/A</span>"}</div>
   </section>`;
 }
 
 function renderServices(states) {
-  const groups = new Map();
-  for (const svc of config.services) {
-    const g = svc.group || "Services";
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(svc);
-  }
-
-  const sections = [...groups.entries()]
-    .map(([group, svcs]) => {
-      const items = svcs
-        .map((svc) => {
-          const st = states[svc.id]?.current_status ?? "unknown";
-          return `<a class="service-row" href="/service/${escapeHtml(svc.id)}">
-            <span class="service-name">${escapeHtml(svc.name)}</span>
-            <span class="service-status">
-              <span class="status-text" style="color:${statusColorVar(st)}">${escapeHtml(statusLabel(st))}</span>
-              <span class="status-dot" style="background:${statusColorVar(st)}"></span>
-            </span>
-          </a>`;
-        })
-        .join("");
-      return `<div class="service-group">
-        <h3 class="service-group-title">${escapeHtml(group)}</h3>
-        <div class="service-list" data-service-list>${items}</div>
-      </div>`;
+  const items = config.services
+    .map((svc) => {
+      const st = states[svc.id]?.current_status ?? "unknown";
+      return `<a class="service-row" href="/service/${escapeHtml(svc.id)}">
+        <span class="service-name">${escapeHtml(svc.name)}</span>
+        <span class="service-status">
+          <span class="status-text" style="color:${statusColorVar(st)}">${escapeHtml(statusLabel(st))}</span>
+          <span class="status-dot" style="background:${statusColorVar(st)}"></span>
+        </span>
+      </a>`;
     })
     .join("");
 
   return `<section class="section">
     <h2 class="section-title">Services</h2>
-    ${sections}
+    <div class="service-list" data-service-list>${items}</div>
   </section>`;
 }
 
@@ -174,49 +186,49 @@ function renderRecentIncidents(incidents) {
       <p class="empty">No incidents reported.</p>
     </section>`;
   }
-  const items = incidents
-    .map((i) => {
-      const duration = i.resolved_at ? fmtDuration(i.started_at, i.resolved_at) : "ongoing";
-      return `<a class="past-incident" href="/incident/${escapeHtml(i.id)}">
-        <div class="past-meta">${escapeHtml(fmtDate(i.started_at))}</div>
-        <div class="past-title">${escapeHtml(i.title)}</div>
-        <div class="past-tags">
-          <span class="pill" style="--pill:${incidentTypeColor(i.type)}">${escapeHtml(i.type)}</span>
-          <span class="muted">${escapeHtml(i.status)}</span>
-          <span class="muted">Duration: ${escapeHtml(duration)}</span>
-        </div>
-      </a>`;
-    })
-    .join("");
   return `<section class="section">
     <h2 class="section-title">Past incidents</h2>
-    <div class="past-list">${items}</div>
+    <div class="past-list">${incidents.map(pastIncidentRow).join("")}</div>
   </section>`;
 }
 
-export function renderServiceDetail({ service, state, uptime, issueCounts, incidents, dailyUptime, recent }) {
+function pastIncidentRow(i) {
+  const duration = i.resolved_at ? fmtDuration(i.started_at, i.resolved_at) : "ongoing";
+  const state = i.status === "resolved" ? "Resolved" : escapeHtml(i.status);
+  return `<a class="past-incident" href="/incident/${escapeHtml(i.id)}">
+    <div class="past-meta">${tsSpan(i.started_at)}</div>
+    <div class="past-title">${escapeHtml(i.title)}</div>
+    <div class="past-tags">
+      <span class="muted">${state}</span>
+      <span class="muted">Duration: ${escapeHtml(duration)}</span>
+      <span class="pill" style="--pill:${incidentTypeColor(i.type)}">${escapeHtml(i.type)}</span>
+    </div>
+  </a>`;
+}
+
+/* ------------------------------------------------------------- detail page */
+
+export function renderServiceDetail({
+  service,
+  state,
+  uptime,
+  uptime24h,
+  issueCounts,
+  incidents,
+  dailyUptime,
+  intraday,
+}) {
   const st = state?.current_status ?? "unknown";
-  const bars = renderUptimeBars(dailyUptime);
+  const dayBars = renderDailyBars(dailyUptime, incidents, 30);
+  const intradayBars = renderIntradayBars(intraday, 24, 5);
+
   const incidentItems = incidents.length
-    ? incidents
-        .map((i) => {
-          const duration = i.resolved_at ? fmtDuration(i.started_at, i.resolved_at) : "ongoing";
-          return `<a class="past-incident" href="/incident/${escapeHtml(i.id)}">
-            <div class="past-meta">${escapeHtml(fmtDate(i.started_at))}</div>
-            <div class="past-title">${escapeHtml(i.title)}</div>
-            <div class="past-tags">
-              <span class="pill" style="--pill:${incidentTypeColor(i.type)}">${escapeHtml(i.type)}</span>
-              <span class="muted">${escapeHtml(i.status)}</span>
-              <span class="muted">Duration: ${escapeHtml(duration)}</span>
-            </div>
-          </a>`;
-        })
-        .join("")
+    ? incidents.map(pastIncidentRow).join("")
     : `<p class="empty">No past issues.</p>`;
 
   const body = `
   ${header()}
-  <main class="container">
+  <main class="container" data-status-root>
     <nav class="crumbs"><a href="/">Overview</a> / <span>${escapeHtml(service.name)}</span></nav>
     <section class="banner banner-${st}">
       <div class="banner-dot" style="background:${statusColorVar(st)}"></div>
@@ -226,37 +238,36 @@ export function renderServiceDetail({ service, state, uptime, issueCounts, incid
       </div>
     </section>
 
-    <section class="section stats-grid">
-      <div class="stat">
-        <div class="stat-label">Uptime 30 days</div>
-        <div class="stat-value">${uptime.uptime != null ? (uptime.uptime * 100).toFixed(3) + "%" : "N/A"}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Issues 30 days</div>
-        <div class="stat-value stat-issues">
-          <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
-          <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
-          <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
-        </div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg latency</div>
-        <div class="stat-value">${state?.last_latency_ms != null ? state.last_latency_ms + " ms" : "N/A"}</div>
+    <section class="section detail-metrics">
+      <div class="metric">
+        <div class="metric-label">Up Time 30 Days</div>
+        <div class="metric-value">${uptime.uptime != null ? (uptime.uptime * 100).toFixed(3) + "%" : "N/A"}</div>
+        <div class="uptime-bars" data-bars>${dayBars}</div>
       </div>
     </section>
 
     <section class="section">
-      <h2 class="section-title">Uptime (last ${dailyUptime.length || 0} days)</h2>
-      <div class="uptime-bars">${bars}</div>
+      <div class="metric-label">Up Time Last 24 Hours (5-min)</div>
+      <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
     </section>
 
     <section class="section">
-      <h2 class="section-title">Past issues</h2>
+      <div class="metric-label">Issues 30 Days</div>
+      <div class="issues-counts">
+        <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
+        <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
+        <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Past Issues</h2>
       <div class="past-list">${incidentItems}</div>
     </section>
-
-    <footer class="footer"><a href="/">Back to overview</a></footer>
-  </main>`;
+  </main>
+  ${renderFooter()}
+  <div class="tooltip" data-tooltip hidden></div>
+  <script src="/app.js" defer></script>`;
 
   return page({ title: `${service.name} Status`, body });
 }
@@ -274,31 +285,86 @@ function detailSub(status) {
   }
 }
 
-function renderUptimeBars(dailyUptime) {
-  if (!dailyUptime.length) {
-    return `<span class="empty">No data yet.</span>`;
+function barColor(ratio) {
+  if (ratio == null) return "var(--muted)";
+  if (ratio >= 0.999) return "var(--ok)";
+  if (ratio >= 0.95) return "var(--warn)";
+  return "var(--bad)";
+}
+
+/**
+ * 30-day uptime bars, gap-filled so every day has a bar (gray when no data).
+ * Hover shows date, uptime %, and any incidents that started that day.
+ */
+function renderDailyBars(dailyUptime, incidents, days) {
+  const byDay = new Map();
+  for (const d of dailyUptime) byDay.set(Number(d.day), d);
+
+  // Map incidents to their start day-index.
+  const incByDay = new Map();
+  for (const i of incidents) {
+    const dayIdx = Math.floor(i.started_at / DAY);
+    if (!incByDay.has(dayIdx)) incByDay.set(dayIdx, []);
+    incByDay.get(dayIdx).push(i);
   }
-  return dailyUptime
-    .map((d) => {
-      const ratio = d.total > 0 ? d.ok_count / d.total : null;
-      let color = "var(--muted)";
-      if (ratio != null) {
-        if (ratio >= 0.999) color = "var(--ok)";
-        else if (ratio >= 0.95) color = "var(--warn)";
-        else color = "var(--bad)";
-      }
-      const pct = ratio != null ? (ratio * 100).toFixed(2) + "%" : "no data";
-      const date = new Date(d.day * 86400 * 1000).toISOString().slice(0, 10);
-      return `<span class="bar" style="background:${color}" title="${date}: ${pct}"></span>`;
-    })
-    .join("");
+
+  const todayIdx = Math.floor(Date.now() / 1000 / DAY);
+  const bars = [];
+  for (let k = days - 1; k >= 0; k--) {
+    const dayIdx = todayIdx - k;
+    const row = byDay.get(dayIdx);
+    const total = row?.total ?? 0;
+    const ok = row?.ok_count ?? 0;
+    const ratio = total > 0 ? ok / total : null;
+    const dateStr = new Date(dayIdx * DAY * 1000).toISOString().slice(0, 10);
+    const pct = ratio != null ? (ratio * 100).toFixed(2) + "%" : "No data";
+
+    const incs = incByDay.get(dayIdx) ?? [];
+    const incLines = incs
+      .map((i) => `${i.type}: ${i.title}`)
+      .join("\n");
+    const tip = [`${dateStr}`, `Uptime: ${pct}`, incLines].filter(Boolean).join("\n");
+
+    bars.push(
+      `<span class="bar" style="background:${barColor(ratio)}" data-tip="${escapeHtml(tip)}"></span>`
+    );
+  }
+  return bars.join("");
+}
+
+/**
+ * 24h uptime bars in 5-minute buckets (288 bars), gap-filled (gray = no data).
+ * Hover shows the time window and uptime %.
+ */
+function renderIntradayBars(intraday, hours, bucketMin) {
+  const bucketSec = bucketMin * 60;
+  const byBucket = new Map();
+  for (const b of intraday) byBucket.set(Number(b.bucket), b);
+
+  const nowBucket = Math.floor(Date.now() / 1000 / bucketSec);
+  const count = Math.round((hours * 3600) / bucketSec);
+  const bars = [];
+  for (let k = count - 1; k >= 0; k--) {
+    const idx = nowBucket - k;
+    const row = byBucket.get(idx);
+    const total = row?.total ?? 0;
+    const ok = row?.ok_count ?? 0;
+    const ratio = total > 0 ? ok / total : null;
+    const startSec = idx * bucketSec;
+    const pct = ratio != null ? (ratio * 100).toFixed(0) + "%" : "No data";
+    // data-ts-range lets the client localize the window label in the tooltip.
+    bars.push(
+      `<span class="bar bar-dense" style="background:${barColor(ratio)}" data-tip-ts="${startSec}" data-tip-dur="${bucketSec}" data-tip-pct="${escapeHtml(pct)}"></span>`
+    );
+  }
+  return bars.join("");
 }
 
 export function renderIncidentPage(incident) {
   if (!incident) {
     return page({
       title: "Incident not found",
-      body: `${header()}<main class="container"><p class="empty">Incident not found.</p><p><a href="/">Back</a></p></main>`,
+      body: `${header()}<main class="container"><p class="empty">Incident not found.</p><p><a href="/">Back</a></p></main>${renderFooter()}<script src="/app.js" defer></script>`,
     });
   }
   const duration = incident.resolved_at ? fmtDuration(incident.started_at, incident.resolved_at) : "ongoing";
@@ -307,7 +373,7 @@ export function renderIncidentPage(incident) {
       (u) => `<li class="timeline-item">
         <div class="timeline-status">${escapeHtml(u.status)}</div>
         <div class="timeline-body">${escapeHtml(u.body)}</div>
-        <div class="timeline-time">${escapeHtml(fmtDate(u.created_at))}</div>
+        <div class="timeline-time">${tsSpan(u.created_at)}</div>
       </li>`
     )
     .join("");
@@ -319,22 +385,24 @@ export function renderIncidentPage(incident) {
 
   const body = `
   ${header()}
-  <main class="container">
+  <main class="container" data-status-root>
     <nav class="crumbs"><a href="/">Overview</a> / <span>Incident</span></nav>
     <section class="section">
       <div class="incident-head">
         <span class="pill" style="--pill:${incidentTypeColor(incident.type)}">${escapeHtml(incident.type)}</span>
         <h1 class="banner-title">${escapeHtml(incident.title)}</h1>
       </div>
-      <p class="muted">Started ${escapeHtml(fmtDate(incident.started_at))} · ${escapeHtml(incident.status)} · Duration: ${escapeHtml(duration)}</p>
+      <p class="muted">Started ${tsSpan(incident.started_at)} · ${escapeHtml(incident.status)} · Duration: ${escapeHtml(duration)}</p>
       ${services ? `<p class="muted">Affected: ${services}</p>` : ""}
     </section>
     <section class="section">
       <h2 class="section-title">Timeline</h2>
       <ul class="timeline">${updates || '<li class="empty">No updates.</li>'}</ul>
     </section>
-    <footer class="footer"><a href="/">Back to overview</a></footer>
-  </main>`;
+  </main>
+  ${renderFooter()}
+  <div class="tooltip" data-tooltip hidden></div>
+  <script src="/app.js" defer></script>`;
 
   return page({ title: `${incident.title}`, body });
 }

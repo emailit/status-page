@@ -60,6 +60,15 @@ export function fmtDate(epochSec) {
   }) + " UTC";
 }
 
+/**
+ * Timestamp span that the client reformats into the selected timezone.
+ * The server renders a UTC fallback for no-JS / initial paint.
+ */
+export function tsSpan(epochSec) {
+  if (!epochSec) return `<span>N/A</span>`;
+  return `<span data-ts="${epochSec}">${escapeHtml(fmtDate(epochSec))}</span>`;
+}
+
 export function fmtDuration(startSec, endSec) {
   if (!startSec || !endSec) return "-";
   let s = Math.max(0, endSec - startSec);
