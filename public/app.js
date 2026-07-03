@@ -191,10 +191,14 @@
       const id = href.split("/service/")[1];
       if (!id) return;
       const st = (snap.states[id] && snap.states[id].current_status) || "unknown";
+      row.setAttribute("data-status", st);
+      const badge = row.querySelector(".status-badge");
       const text = row.querySelector(".status-text");
-      const dot = row.querySelector(".status-dot");
-      if (text) { text.textContent = statusText(st); text.style.color = statusColor(st); }
-      if (dot) dot.style.background = statusColor(st);
+      if (badge) {
+        badge.className =
+          "status-badge status-badge-" + st;
+      }
+      if (text) text.textContent = statusText(st);
     });
   }
 

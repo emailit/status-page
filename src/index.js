@@ -82,7 +82,7 @@ app.get("/incident/:id", async (c) => {
 
 app.get("/admin", async (c) => {
   if (!c.env.ADMIN_PASSWORD) {
-    return html(c, renderLogin("ADMIN_PASSWORD is not configured. Set it with `wrangler secret put ADMIN_PASSWORD`."));
+    return html(c, renderLogin("ADMIN_PASSWORD is not configured. In the Cloudflare dashboard, add it under Settings > Variables and Secrets as a Secret (not a Build variable), or run `wrangler secret put ADMIN_PASSWORD`."));
   }
   if (!(await isAuthenticated(c.req.raw, c.env))) {
     return html(c, renderLogin());

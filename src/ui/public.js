@@ -163,11 +163,11 @@ function renderServices(states) {
   const items = config.services
     .map((svc) => {
       const st = states[svc.id]?.current_status ?? "unknown";
-      return `<a class="service-row" href="/service/${escapeHtml(svc.id)}">
+      return `<a class="service-row" href="/service/${escapeHtml(svc.id)}" data-status="${escapeHtml(st)}">
         <span class="service-name">${escapeHtml(svc.name)}</span>
-        <span class="service-status">
-          <span class="status-text" style="color:${statusColorVar(st)}">${escapeHtml(statusLabel(st))}</span>
-          <span class="status-dot" style="background:${statusColorVar(st)}"></span>
+        <span class="status-badge status-badge-${escapeHtml(st)}">
+          <span class="status-dot"></span>
+          <span class="status-text">${escapeHtml(statusLabel(st))}</span>
         </span>
       </a>`;
     })
@@ -175,7 +175,7 @@ function renderServices(states) {
 
   return `<section class="section">
     <h2 class="section-title">Services</h2>
-    <div class="service-list" data-service-list>${items}</div>
+    <div class="service-grid" data-service-list>${items}</div>
   </section>`;
 }
 
@@ -238,25 +238,34 @@ export function renderServiceDetail({
       </div>
     </section>
 
-    <section class="section detail-metrics">
-      <div class="metric">
-        <div class="metric-label">Up Time 30 Days</div>
-        <div class="metric-value">${uptime.uptime != null ? (uptime.uptime * 100).toFixed(3) + "%" : "N/A"}</div>
+    <section class="section">
+      <div class="metric-card">
+        <div class="metric-head">
+          <div class="metric-label">Up Time 30 Days</div>
+          <div class="metric-value">${uptime.uptime != null ? (uptime.uptime * 100).toFixed(3) + "%" : "N/A"}</div>
+        </div>
         <div class="uptime-bars" data-bars>${dayBars}</div>
       </div>
     </section>
 
     <section class="section">
-      <div class="metric-label">Up Time Last 24 Hours (5-min)</div>
-      <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
+      <div class="metric-card">
+        <div class="metric-head">
+          <div class="metric-label">Up Time Last 24 Hours (5-min)</div>
+          <div class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</div>
+        </div>
+        <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
+      </div>
     </section>
 
     <section class="section">
-      <div class="metric-label">Issues 30 Days</div>
-      <div class="issues-counts">
-        <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
-        <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
-        <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
+      <div class="metric-card">
+        <div class="metric-label">Issues 30 Days</div>
+        <div class="issues-counts">
+          <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
+          <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
+          <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
+        </div>
       </div>
     </section>
 
