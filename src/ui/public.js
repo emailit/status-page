@@ -238,13 +238,22 @@ export function renderServiceDetail({
       </div>
     </section>
 
-    <section class="section">
+    <section class="section detail-row">
       <div class="metric-card">
         <div class="metric-head">
           <div class="metric-label">Up Time 30 Days</div>
           <div class="metric-value">${uptime.uptime != null ? (uptime.uptime * 100).toFixed(3) + "%" : "N/A"}</div>
         </div>
         <div class="uptime-bars" data-bars>${dayBars}</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Issues 30 Days</div>
+        <div class="issues-counts">
+          <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
+          <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
+          <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
+        </div>
       </div>
     </section>
 
@@ -255,17 +264,6 @@ export function renderServiceDetail({
           <div class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</div>
         </div>
         <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="metric-card">
-        <div class="metric-label">Issues 30 Days</div>
-        <div class="issues-counts">
-          <span><strong style="color:${incidentTypeColor("disruption")}">${issueCounts.disruption}</strong> disruption</span>
-          <span><strong style="color:${incidentTypeColor("info")}">${issueCounts.info}</strong> info</span>
-          <span><strong style="color:${incidentTypeColor("outage")}">${issueCounts.outage}</strong> outage</span>
-        </div>
       </div>
     </section>
 
@@ -351,17 +349,27 @@ function renderIntradayBars(intraday, hours, bucketMin) {
   for (const b of intraday) byBucket.set(Number(b.bucket), b);
 
   const nowBucket = Math.floor(Date.now() / 1000 / bucketSec);
-  const count = Math.round((hours * 3600) / bucketSec);
+  const fullCount = Math.round((hours * 3600) / bucketSec);
+  const windowStart = nowBucket - (fullCount - 1);
+
+  // Avoid a wall of gray before monitoring began: start the chart at the first
+  // bucket that actually has data (clamped to the 24h window). Gaps *within* the
+  // monitored range still render gray so genuine outages/missing data show.
+  let firstData = null;
+  for (const key of byBucket.keys()) {
+    if (key < windowStart) continue;
+    if (firstData == null || key < firstData) firstData = key;
+  }
+  const startBucket = firstData != null ? firstData : windowStart;
+
   const bars = [];
-  for (let k = count - 1; k >= 0; k--) {
-    const idx = nowBucket - k;
+  for (let idx = startBucket; idx <= nowBucket; idx++) {
     const row = byBucket.get(idx);
     const total = row?.total ?? 0;
     const ok = row?.ok_count ?? 0;
     const ratio = total > 0 ? ok / total : null;
     const startSec = idx * bucketSec;
     const pct = ratio != null ? (ratio * 100).toFixed(0) + "%" : "No data";
-    // data-ts-range lets the client localize the window label in the tooltip.
     bars.push(
       `<span class="bar bar-dense" style="background:${barColor(ratio)}" data-tip-ts="${startSec}" data-tip-dur="${bucketSec}" data-tip-pct="${escapeHtml(pct)}"></span>`
     );

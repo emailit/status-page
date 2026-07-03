@@ -145,12 +145,14 @@ a:hover { opacity: 0.85; }
 .past-tags { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* Detail metrics */
+.detail-row { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: stretch; }
+@media (max-width: 640px) { .detail-row { grid-template-columns: 1fr; } }
 .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
 .metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .metric-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-.metric-value { font-size: 24px; font-weight: 600; font-family: var(--mono); }
-.issues-counts { display: flex; gap: 24px; flex-wrap: wrap; font-size: 14px; margin-top: 12px; }
-.issues-counts strong { font-size: 18px; margin-right: 4px; }
+.metric-value { font-size: 16px; font-weight: 600; font-family: var(--mono); }
+.issues-counts { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; margin-top: 12px; }
+.issues-counts strong { font-size: 15px; margin-right: 4px; }
 
 /* Uptime bars */
 .uptime-bars { display: flex; gap: 3px; align-items: flex-end; flex-wrap: nowrap; overflow-x: auto; }
