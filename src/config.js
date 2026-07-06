@@ -105,6 +105,15 @@ export const config = {
       degradedMs: 1500,
     },
     {
+      id: "tracking",
+      name: "Tracking",
+      url: "https://go.emailitmail.com/health",
+      method: "GET",
+      expectStatus: [200, 301, 302, 307, 308],
+      timeoutMs: 5000,
+      degradedMs: 1500,
+    },
+    {
       id: "website",
       name: "Website",
       url: "https://emailit.com",
