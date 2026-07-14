@@ -219,12 +219,12 @@ export function renderServiceDetail({
   issueCounts,
   incidents,
   dailyUptime,
-  intraday,
+  intradayRecent,
 }) {
   const st = state?.current_status ?? "unknown";
   const visibleIncidents = incidents.filter(isSignificantIncident);
   const dayBars = renderDailyBars(dailyUptime, visibleIncidents, 30);
-  const intradayBars = renderIntradayBars(intraday, 24, 5);
+  const intradayBars = renderIntradayBars(intradayRecent, 6, 5);
   const lastHourPct =
     uptime1h?.uptime != null ? (uptime1h.uptime * 100).toFixed(2) + "%" : "N/A";
 
@@ -266,14 +266,14 @@ export function renderServiceDetail({
     <section class="section">
       <div class="metric-card">
         <div class="metric-head">
-          <div class="metric-label">Up Time Last 24 Hours (5-min)</div>
+          <div class="metric-label">Up Time (5-min buckets)</div>
           <div class="metric-value-group">
-            <span class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</span>
+            <span class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"} <span class="metric-value-hint">24h</span></span>
             <span class="metric-sub">Last hour: ${lastHourPct}</span>
           </div>
         </div>
-        <p class="section-sub">Historical probe results over 24h. Current status is shown above; recent bars on the right reflect the latest checks.</p>
-        <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
+        <p class="section-sub">Chart shows the last 6 hours (most recent bar on the right). The 24h percentage above includes any earlier downtime today.</p>
+        <div class="uptime-bars uptime-bars-dense" data-bars data-bars-recent>${intradayBars}</div>
       </div>
     </section>
 
@@ -365,18 +365,10 @@ function renderIntradayBars(intraday, hours, bucketMin) {
   const fullCount = Math.round((hours * 3600) / bucketSec);
   const windowStart = nowBucket - (fullCount - 1);
 
-  // Avoid a wall of gray before monitoring began: start the chart at the first
-  // bucket that actually has data (clamped to the 24h window). Gaps *within* the
-  // monitored range still render gray so genuine outages/missing data show.
-  let firstData = null;
-  for (const key of byBucket.keys()) {
-    if (key < windowStart) continue;
-    if (firstData == null || key < firstData) firstData = key;
-  }
-  const startBucket = firstData != null ? firstData : windowStart;
-
+  // Always render the full window with the right edge pinned to "now" so the
+  // most recent probes are visible without horizontal scrolling.
   const bars = [];
-  for (let idx = startBucket; idx <= nowBucket; idx++) {
+  for (let idx = windowStart; idx <= nowBucket; idx++) {
     const row = byBucket.get(idx);
     const total = row?.total ?? 0;
     const ok = row?.ok_count ?? 0;

@@ -216,6 +216,9 @@
 
   initTimezone();
   initTooltips();
+  document.querySelectorAll("[data-bars-recent]").forEach((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
   if (document.querySelector("[data-status-root]") && document.querySelector("[data-matrix-body]")) {
     setInterval(refresh, REFRESH_MS);
   }

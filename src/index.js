@@ -50,13 +50,13 @@ app.get("/service/:id", async (c) => {
   const service = getService(c.req.param("id"));
   if (!service) return html(c, renderIncidentPage(null), 404);
 
-  const [state, uptime, uptime24h, uptime1h, dailyUptime, intraday, incidents] = await Promise.all([
+  const [state, uptime, uptime24h, uptime1h, dailyUptime, intradayRecent, incidents] = await Promise.all([
     getServiceState(c.env.DB, service.id),
     getUptime(c.env.DB, service.id, 30),
     getUptime(c.env.DB, service.id, 1),
     getUptimeHours(c.env.DB, service.id, 1),
     getDailyUptime(c.env.DB, service.id, 30),
-    getIntradayUptime(c.env.DB, service.id, 24, 5),
+    getIntradayUptime(c.env.DB, service.id, 6, 5),
     listIncidentsForService(c.env.DB, service.id, { limit: 50 }),
   ]);
 
@@ -72,7 +72,7 @@ app.get("/service/:id", async (c) => {
       issueCounts,
       incidents,
       dailyUptime,
-      intraday,
+      intradayRecent,
     })
   );
 });
