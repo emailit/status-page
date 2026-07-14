@@ -23,6 +23,7 @@ import {
   clearCookie,
 } from "./auth.js";
 import { isSignificantIncident } from "./ui/layout.js";
+import { renderHome, renderServiceDetail, renderIncidentPage } from "./ui/public.js";
 import { renderLogin, renderAdmin } from "./ui/admin.js";
 
 export { RegionProbe } from "./probe-do.js";
