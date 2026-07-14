@@ -1,4 +1,12 @@
 /** Shared HTML helpers and page chrome (x.ai-inspired, minimal/neutral). */
+import { config } from "../config.js";
+
+export function isSignificantIncident(incident, nowSec = Math.floor(Date.now() / 1000)) {
+  if (incident.type !== "disruption") return true;
+  const minSec = (config.disruptionIncidentMin ?? 15) * 60;
+  const end = incident.resolved_at ?? nowSec;
+  return end - incident.started_at >= minSec;
+}
 
 export function escapeHtml(s) {
   return String(s ?? "")

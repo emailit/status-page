@@ -9,6 +9,7 @@ import {
   fmtDate,
   fmtDuration,
   tsSpan,
+  isSignificantIncident,
 } from "./layout.js";
 
 const DAY = 86400;
@@ -180,7 +181,8 @@ function renderServices(states) {
 }
 
 function renderRecentIncidents(incidents) {
-  if (!incidents.length) {
+  const visible = incidents.filter(isSignificantIncident);
+  if (!visible.length) {
     return `<section class="section">
       <h2 class="section-title">Past incidents</h2>
       <p class="empty">No incidents reported.</p>
@@ -188,7 +190,7 @@ function renderRecentIncidents(incidents) {
   }
   return `<section class="section">
     <h2 class="section-title">Past incidents</h2>
-    <div class="past-list">${incidents.map(pastIncidentRow).join("")}</div>
+    <div class="past-list">${visible.map(pastIncidentRow).join("")}</div>
   </section>`;
 }
 
@@ -219,11 +221,12 @@ export function renderServiceDetail({
   intraday,
 }) {
   const st = state?.current_status ?? "unknown";
-  const dayBars = renderDailyBars(dailyUptime, incidents, 30);
+  const visibleIncidents = incidents.filter(isSignificantIncident);
+  const dayBars = renderDailyBars(dailyUptime, visibleIncidents, 30);
   const intradayBars = renderIntradayBars(intraday, 24, 5);
 
-  const incidentItems = incidents.length
-    ? incidents.map(pastIncidentRow).join("")
+  const incidentItems = visibleIncidents.length
+    ? visibleIncidents.map(pastIncidentRow).join("")
     : `<p class="empty">No past issues.</p>`;
 
   const body = `
@@ -295,7 +298,7 @@ function detailSub(status) {
 function barColor(ratio) {
   if (ratio == null) return "var(--muted)";
   if (ratio >= 0.999) return "var(--ok)";
-  if (ratio >= 0.95) return "var(--warn)";
+  if (ratio >= 0.5) return "var(--warn)";
   return "var(--bad)";
 }
 

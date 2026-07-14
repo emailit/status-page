@@ -184,15 +184,25 @@ async function evaluateService(env, service, rows) {
 
   const wasProblem = prev.current_status === "down" || prev.current_status === "degraded";
   const recovered = newStatus === "available" && wasProblem;
+  const disruptionMinSec = (config.disruptionIncidentMin ?? 15) * 60;
 
   if (newStatus === "down" && prev.current_status !== "down") {
     await openOrUpdateAutoIncident(env, service, "outage", rows);
     const r = await sendDownAlert(env, service, evaluation);
     if (r.ok) lastAlertedAt = now;
-  } else if (newStatus === "degraded" && prev.current_status !== "degraded") {
-    await openOrUpdateAutoIncident(env, service, incidentType ?? "disruption", rows);
-    const r = await sendDegradedAlert(env, service, evaluation);
-    if (r.ok) lastAlertedAt = now;
+  } else if (newStatus === "degraded") {
+    // Only open disruption incidents/alerts after degraded has persisted long
+    // enough to rule out transient probe noise (e.g. a single region blip).
+    const degradedSince = prev.current_status === "degraded" ? (prev.last_changed_at ?? now) : now;
+    const degradedForSec = now - degradedSince;
+    if (degradedForSec >= disruptionMinSec) {
+      const existing = await findOpenAutoIncident(env.DB, service.id);
+      if (!existing) {
+        await openOrUpdateAutoIncident(env, service, incidentType ?? "disruption", rows);
+        const r = await sendDegradedAlert(env, service, evaluation);
+        if (r.ok) lastAlertedAt = now;
+      }
+    }
   } else if (recovered) {
     await resolveAutoIncident(env, service);
     const r = await sendRecoveryAlert(env, service, evaluation);

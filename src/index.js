@@ -22,7 +22,7 @@ import {
   sessionCookie,
   clearCookie,
 } from "./auth.js";
-import { renderHome, renderServiceDetail, renderIncidentPage } from "./ui/public.js";
+import { isSignificantIncident } from "./ui/layout.js";
 import { renderLogin, renderAdmin } from "./ui/admin.js";
 
 export { RegionProbe } from "./probe-do.js";
@@ -57,7 +57,7 @@ app.get("/service/:id", async (c) => {
     listIncidentsForService(c.env.DB, service.id, { limit: 50 }),
   ]);
 
-  const issueCounts = countIssues(incidents, 30);
+  const issueCounts = countIssues(incidents.filter(isSignificantIncident), 30);
   return html(
     c,
     renderServiceDetail({

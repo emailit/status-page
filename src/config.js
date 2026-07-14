@@ -64,6 +64,12 @@ export const config = {
   // overrides this.
   warmup: true,
 
+  // Auto "disruption" incidents (and degraded alerts) are only created once a
+  // degraded state has persisted for at least this many minutes. Filters out
+  // brief probe blips from Cloudflare infrastructure. Outages still alert
+  // immediately.
+  disruptionIncidentMin: 15,
+
   // How long to retain raw check rows (days). Older rows are pruned.
   retentionDays: 45,
 

@@ -55,16 +55,39 @@ export async function getLatestMatrix(db) {
   return results ?? [];
 }
 
+/**
+ * Score a probe cycle (all regions at the same checked_at) to match service
+ * health semantics: 1 = all regions up, 0.5 = partial, 0 = all down.
+ */
+const CYCLE_SCORE_SQL = `
+  WITH cycles AS (
+    SELECT
+      checked_at,
+      COUNT(*) AS regions,
+      SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_regions
+    FROM checks
+    WHERE service_id = ? AND checked_at >= ?
+    GROUP BY checked_at
+  ),
+  cycle_score AS (
+    SELECT
+      checked_at,
+      CASE
+        WHEN ok_regions = 0 THEN 0.0
+        WHEN ok_regions < regions THEN 0.5
+        ELSE 1.0
+      END AS score
+    FROM cycles
+  )
+`;
+
 /** Uptime fraction + counts for a service over the past N days. */
 export async function getUptime(db, serviceId, days) {
   const since = nowSec() - days * 86400;
   const row = await db
     .prepare(
-      `SELECT
-         COUNT(*) AS total,
-         SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_count
-       FROM checks
-       WHERE service_id = ? AND checked_at >= ?`
+      `${CYCLE_SCORE_SQL}
+       SELECT COUNT(*) AS total, SUM(score) AS ok_count FROM cycle_score`
     )
     .bind(serviceId, since)
     .first();
@@ -97,12 +120,13 @@ export async function getDailyUptime(db, serviceId, days) {
   const since = nowSec() - days * 86400;
   const { results } = await db
     .prepare(
-      `SELECT
-         CAST(checked_at / 86400 AS INTEGER) AS day,
-         COUNT(*) AS total,
-         SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_count
-       FROM checks
-       WHERE service_id = ? AND checked_at >= ?
+      `${CYCLE_SCORE_SQL},
+       scored AS (
+         SELECT CAST(checked_at / 86400 AS INTEGER) AS day, score
+         FROM cycle_score
+       )
+       SELECT day, COUNT(*) AS total, SUM(score) AS ok_count
+       FROM scored
        GROUP BY day
        ORDER BY day ASC`
     )
@@ -121,16 +145,17 @@ export async function getIntradayUptime(db, serviceId, hours = 24, bucketMin = 5
   const since = nowSec() - hours * 3600;
   const { results } = await db
     .prepare(
-      `SELECT
-         CAST(checked_at / ? AS INTEGER) AS bucket,
-         COUNT(*) AS total,
-         SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_count
-       FROM checks
-       WHERE service_id = ? AND checked_at >= ?
+      `${CYCLE_SCORE_SQL},
+       scored AS (
+         SELECT CAST(checked_at / ? AS INTEGER) AS bucket, score
+         FROM cycle_score
+       )
+       SELECT bucket, COUNT(*) AS total, SUM(score) AS ok_count
+       FROM scored
        GROUP BY bucket
        ORDER BY bucket ASC`
     )
-    .bind(bucketSec, serviceId, since)
+    .bind(serviceId, since, bucketSec)
     .all();
   return results ?? [];
 }
