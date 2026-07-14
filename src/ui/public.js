@@ -215,6 +215,7 @@ export function renderServiceDetail({
   state,
   uptime,
   uptime24h,
+  uptime1h,
   issueCounts,
   incidents,
   dailyUptime,
@@ -224,6 +225,8 @@ export function renderServiceDetail({
   const visibleIncidents = incidents.filter(isSignificantIncident);
   const dayBars = renderDailyBars(dailyUptime, visibleIncidents, 30);
   const intradayBars = renderIntradayBars(intraday, 24, 5);
+  const lastHourPct =
+    uptime1h?.uptime != null ? (uptime1h.uptime * 100).toFixed(2) + "%" : "N/A";
 
   const incidentItems = visibleIncidents.length
     ? visibleIncidents.map(pastIncidentRow).join("")
@@ -237,7 +240,7 @@ export function renderServiceDetail({
       <div class="banner-dot" style="background:${statusColorVar(st)}"></div>
       <div>
         <h1 class="banner-title">${escapeHtml(service.name)}</h1>
-        <p class="banner-sub">${escapeHtml(detailSub(st))}</p>
+        <p class="banner-sub">${escapeHtml(detailSub(st, uptime1h))}</p>
       </div>
     </section>
 
@@ -264,8 +267,12 @@ export function renderServiceDetail({
       <div class="metric-card">
         <div class="metric-head">
           <div class="metric-label">Up Time Last 24 Hours (5-min)</div>
-          <div class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</div>
+          <div class="metric-value-group">
+            <span class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</span>
+            <span class="metric-sub">Last hour: ${lastHourPct}</span>
+          </div>
         </div>
+        <p class="section-sub">Historical probe results over 24h. Current status is shown above; recent bars on the right reflect the latest checks.</p>
         <div class="uptime-bars uptime-bars-dense" data-bars>${intradayBars}</div>
       </div>
     </section>
@@ -282,9 +289,12 @@ export function renderServiceDetail({
   return page({ title: `${service.name} Status`, body });
 }
 
-function detailSub(status) {
+function detailSub(status, uptime1h) {
   switch (status) {
     case "available":
+      if (uptime1h?.uptime != null && uptime1h.uptime >= 0.999) {
+        return "Service fully operational. All probes passing in the last hour.";
+      }
       return "Service fully operational.";
     case "degraded":
       return "Service is experiencing degraded performance.";

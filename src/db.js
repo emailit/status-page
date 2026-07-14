@@ -1,6 +1,7 @@
 /**
  * D1 query helpers. All timestamps are unix epoch seconds.
  */
+import { config } from "./config.js";
 
 export function nowSec() {
   return Math.floor(Date.now() / 1000);
@@ -55,41 +56,69 @@ export async function getLatestMatrix(db) {
   return results ?? [];
 }
 
+/** Probe cadence in seconds — used to group region results into one cycle. */
+function probeCycleSec() {
+  return (config.probeIntervalMin ?? 5) * 60;
+}
+
 /**
- * Score a probe cycle (all regions at the same checked_at) to match service
- * health semantics: 1 = all regions up, 0.5 = partial, 0 = all down.
+ * Score probe cycles to match service health semantics: 1 = all regions up,
+ * 0.5 = partial, 0 = all down. Regions are grouped by probe-interval window
+ * (not exact checked_at) so parallel DO probes 1s apart count as one cycle.
  */
-const CYCLE_SCORE_SQL = `
+function cycleScoreSql() {
+  return `
   WITH cycles AS (
     SELECT
-      checked_at,
+      CAST(checked_at / ? AS INTEGER) AS cycle_id,
       COUNT(*) AS regions,
       SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_regions
     FROM checks
     WHERE service_id = ? AND checked_at >= ?
-    GROUP BY checked_at
+    GROUP BY cycle_id
   ),
   cycle_score AS (
     SELECT
-      checked_at,
+      cycle_id,
       CASE
         WHEN ok_regions = 0 THEN 0.0
         WHEN ok_regions < regions THEN 0.5
         ELSE 1.0
       END AS score
     FROM cycles
-  )
-`;
+  )`;
+}
 
 /** Uptime fraction + counts for a service over the past N days. */
 export async function getUptime(db, serviceId, days) {
   const since = nowSec() - days * 86400;
+  const cycleSec = probeCycleSec();
   const row = await db
     .prepare(
-      `${CYCLE_SCORE_SQL}
+      `${cycleScoreSql()}
        SELECT COUNT(*) AS total, SUM(score) AS ok_count FROM cycle_score`
     )
-    .bind(serviceId, since)
+    .bind(cycleSec, serviceId, since)
+    .first();
+  const total = row?.total ?? 0;
+  const okCount = row?.ok_count ?? 0;
+  return {
+    total,
+    okCount,
+    uptime: total > 0 ? okCount / total : null,
+  };
+}
+
+/** Uptime over the past N hours (for "last hour" on the detail page). */
+export async function getUptimeHours(db, serviceId, hours) {
+  const since = nowSec() - hours * 3600;
+  const cycleSec = probeCycleSec();
+  const row = await db
+    .prepare(
+      `${cycleScoreSql()}
+       SELECT COUNT(*) AS total, SUM(score) AS ok_count FROM cycle_score`
+    )
+    .bind(cycleSec, serviceId, since)
     .first();
   const total = row?.total ?? 0;
   const okCount = row?.ok_count ?? 0;
@@ -118,11 +147,12 @@ export async function getRecentChecks(db, serviceId, limit = 90) {
 /** Daily uptime buckets for the last N days (for the uptime bar chart). */
 export async function getDailyUptime(db, serviceId, days) {
   const since = nowSec() - days * 86400;
+  const cycleSec = probeCycleSec();
   const { results } = await db
     .prepare(
-      `${CYCLE_SCORE_SQL},
+      `${cycleScoreSql()},
        scored AS (
-         SELECT CAST(checked_at / 86400 AS INTEGER) AS day, score
+         SELECT CAST((cycle_id * ?) / 86400 AS INTEGER) AS day, score
          FROM cycle_score
        )
        SELECT day, COUNT(*) AS total, SUM(score) AS ok_count
@@ -130,7 +160,7 @@ export async function getDailyUptime(db, serviceId, days) {
        GROUP BY day
        ORDER BY day ASC`
     )
-    .bind(serviceId, since)
+    .bind(cycleSec, serviceId, since, cycleSec)
     .all();
   return results ?? [];
 }
@@ -143,11 +173,12 @@ export async function getDailyUptime(db, serviceId, days) {
 export async function getIntradayUptime(db, serviceId, hours = 24, bucketMin = 5) {
   const bucketSec = bucketMin * 60;
   const since = nowSec() - hours * 3600;
+  const cycleSec = probeCycleSec();
   const { results } = await db
     .prepare(
-      `${CYCLE_SCORE_SQL},
+      `${cycleScoreSql()},
        scored AS (
-         SELECT CAST(checked_at / ? AS INTEGER) AS bucket, score
+         SELECT CAST((cycle_id * ?) / ? AS INTEGER) AS bucket, score
          FROM cycle_score
        )
        SELECT bucket, COUNT(*) AS total, SUM(score) AS ok_count
@@ -155,7 +186,7 @@ export async function getIntradayUptime(db, serviceId, hours = 24, bucketMin = 5
        GROUP BY bucket
        ORDER BY bucket ASC`
     )
-    .bind(serviceId, since, bucketSec)
+    .bind(cycleSec, serviceId, since, cycleSec, bucketSec)
     .all();
   return results ?? [];
 }
