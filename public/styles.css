@@ -150,10 +150,18 @@ a:hover { opacity: 0.85; }
 .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
 .metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .metric-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-.metric-value-group { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.metric-value { font-size: 16px; font-weight: 600; font-family: var(--mono); }
-.metric-value-hint { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 4px; }
-.metric-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.metric-card-chart .metric-head { align-items: flex-start; margin-bottom: 16px; }
+.metric-caption { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.metric-stats { display: flex; gap: 10px; flex: none; }
+.metric-stat {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  padding: 8px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+  border: 1px solid var(--border);
+  min-width: 72px;
+}
+.metric-stat-value { font-size: 15px; font-weight: 600; font-family: var(--mono); line-height: 1; }
+.metric-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .issues-counts { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; margin-top: 12px; }
 .issues-counts strong { font-size: 15px; margin-right: 4px; }
 
@@ -161,8 +169,9 @@ a:hover { opacity: 0.85; }
 .uptime-bars { display: flex; gap: 3px; align-items: flex-end; flex-wrap: nowrap; overflow-x: auto; }
 .bar { width: 9px; height: 36px; border-radius: 3px; display: inline-block; flex: none; cursor: default; transition: opacity 0.1s; }
 .bar:hover { opacity: 0.7; }
-.uptime-bars-dense { gap: 1px; }
-.uptime-bars[data-bars-recent] { overflow-x: visible; flex-wrap: nowrap; }
+.uptime-bars-dense { gap: 2px; }
+.uptime-bars-fill { width: 100%; overflow: hidden; }
+.uptime-bars-fill .bar-dense { flex: 1 1 0; width: auto; min-width: 2px; height: 36px; border-radius: 2px; }
 .bar-dense { width: 4px; height: 30px; border-radius: 1px; }
 
 /* Hover tooltip */

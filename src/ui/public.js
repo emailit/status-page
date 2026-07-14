@@ -264,16 +264,24 @@ export function renderServiceDetail({
     </section>
 
     <section class="section">
-      <div class="metric-card">
+      <div class="metric-card metric-card-chart">
         <div class="metric-head">
-          <div class="metric-label">Up Time (5-min buckets)</div>
-          <div class="metric-value-group">
-            <span class="metric-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"} <span class="metric-value-hint">24h</span></span>
-            <span class="metric-sub">Last hour: ${lastHourPct}</span>
+          <div>
+            <div class="metric-label">Recent uptime</div>
+            <p class="metric-caption">Last 6 hours · 5-min buckets · right = now</p>
+          </div>
+          <div class="metric-stats">
+            <span class="metric-stat">
+              <span class="metric-stat-value">${uptime24h?.uptime != null ? (uptime24h.uptime * 100).toFixed(2) + "%" : "N/A"}</span>
+              <span class="metric-stat-label">24h</span>
+            </span>
+            <span class="metric-stat">
+              <span class="metric-stat-value">${lastHourPct}</span>
+              <span class="metric-stat-label">1h</span>
+            </span>
           </div>
         </div>
-        <p class="section-sub">Chart shows the last 6 hours (most recent bar on the right). The 24h percentage above includes any earlier downtime today.</p>
-        <div class="uptime-bars uptime-bars-dense" data-bars data-bars-recent>${intradayBars}</div>
+        <div class="uptime-bars uptime-bars-dense uptime-bars-fill" data-bars data-bars-recent>${intradayBars}</div>
       </div>
     </section>
 
